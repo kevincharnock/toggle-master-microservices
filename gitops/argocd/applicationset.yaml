@@ -1,0 +1,65 @@
+# ============================================================================
+# ApplicationSet do ArgoCD
+#
+# ESTE ARQUIVO E O QUE FECHA O CICLO GITOPS.
+#
+# Ele diz ao ArgoCD: "monitore a pasta gitops/<nome> deste repositorio e
+# mantenha o cluster sempre igual ao que estiver la".
+#
+# Um ApplicationSet com generator de lista cria as 5 Applications a partir de
+# um template unico. E mais elegante que 5 arquivos Application copiados: para
+# mudar uma politica de sync, voce edita um lugar so.
+#
+# ANTES DE APLICAR: troque SEU_USUARIO na linha repoURL.
+#
+# COMO APLICAR:
+#   kubectl apply -f gitops/argocd/applicationset.yaml
+# ============================================================================
+
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: toggle-master
+  namespace: argocd
+
+spec:
+  generators:
+    - list:
+        elements:
+          - name: auth-service
+          - name: flag-service
+          - name: targeting-service
+          - name: evaluation-service
+          - name: analytics-service
+
+  template:
+    metadata:
+      name: '{{name}}'
+      namespace: argocd
+
+    spec:
+      project: default
+
+      source:
+        repoURL: https://github.com/kevincharnock/toggle-master-microservices.git
+        targetRevision: main
+        path: gitops/{{name}}
+
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: default
+
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+
+        syncOptions:
+          - CreateNamespace=true
+
+        retry:
+          limit: 5
+          backoff:
+            duration: 5s
+            factor: 2
+            maxDuration: 3m

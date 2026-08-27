@@ -1,0 +1,100 @@
+# ============================================================================
+# Deployment do evaluation-service
+#
+# Diferente dos outros: nao usa Postgres. Consome Redis (cache) e SQS (fila).
+# Por isso as variaveis de ambiente vem de um ConfigMap, nao de um Secret -
+# endpoint de Redis e URL de fila nao sao segredo.
+# ============================================================================
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: evaluation-service
+  namespace: default
+  labels:
+    app: evaluation-service
+
+spec:
+  replicas: 2
+
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+
+  selector:
+    matchLabels:
+      app: evaluation-service
+
+  template:
+    metadata:
+      labels:
+        app: evaluation-service
+
+    spec:
+      serviceAccountName: evaluation-service
+
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+
+      containers:
+        - name: evaluation-service
+          # >>> ESTA LINHA E REESCRITA PELO CI <<<
+          image: 123456789012.dkr.ecr.us-east-1.amazonaws.com/toggle-master/evaluation-service:placeholder
+          imagePullPolicy: Always
+
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+
+          envFrom:
+            - configMapRef:
+                name: evaluation-config
+
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
+
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 20
+
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: evaluation-service
+  namespace: default
+
+---
+# ConfigMap: preencha com os outputs do terraform
+#   terraform output redis_endpoint
+#   terraform output sqs_queue_url
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: evaluation-config
+  namespace: default
+data:
+  REDIS_HOST: "PREENCHER-COM-terraform-output-redis_endpoint"
+  REDIS_PORT: "6379"
+  SQS_QUEUE_URL: "PREENCHER-COM-terraform-output-sqs_queue_url"
+  AWS_REGION: "us-east-1"

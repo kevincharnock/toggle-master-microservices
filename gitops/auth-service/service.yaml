@@ -1,0 +1,26 @@
+# ============================================================================
+# Service do auth-service
+#
+# ClusterIP = so acessivel de dentro do cluster. Outros microsservicos
+# alcancam este pelo nome DNS: http://auth-service:8080
+# ============================================================================
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth-service
+  namespace: default
+  labels:
+    app: auth-service
+
+spec:
+  type: ClusterIP
+
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+      protocol: TCP
+
+  selector:
+    app: auth-service

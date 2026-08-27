@@ -1,0 +1,106 @@
+# ============================================================================
+# Deployment do flag-service
+#
+# A LINHA DA IMAGEM abaixo e reescrita automaticamente pelo CI a cada deploy.
+# O ArgoCD detecta essa mudanca no Git e aplica no cluster sozinho.
+# ============================================================================
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flag-service
+  namespace: default
+  labels:
+    app: flag-service
+
+spec:
+  replicas: 2
+
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+
+  selector:
+    matchLabels:
+      app: flag-service
+
+  template:
+    metadata:
+      labels:
+        app: flag-service
+
+    spec:
+      serviceAccountName: flag-service
+
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+
+      containers:
+        - name: flag-service
+          # >>> ESTA LINHA E REESCRITA PELO CI <<<
+          image: 123456789012.dkr.ecr.us-east-1.amazonaws.com/toggle-master/flag-service:placeholder
+          imagePullPolicy: Always
+
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+
+          env:
+            - name: DB_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: flag-db-secret
+                  key: host
+            - name: DB_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: flag-db-secret
+                  key: port
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: flag-db-secret
+                  key: username
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: flag-db-secret
+                  key: password
+            - name: DB_NAME
+              value: "flag"
+
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
+
+          # Liveness: se falhar, o Kubernetes REINICIA o pod
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 20
+
+          # Readiness: se falhar, o pod para de receber trafego (mas nao reinicia)
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: flag-service
+  namespace: default
