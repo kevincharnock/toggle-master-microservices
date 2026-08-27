@@ -1,0 +1,290 @@
+# ============================================================================
+# WORKFLOW REUTILIZAVEL - a logica de CI mora aqui, uma vez so.
+#
+# Os 5 workflows por servico (auth-ci.yml, flag-ci.yml, ...) so chamam este
+# arquivo passando o nome do servico. Assim voce atende o requisito
+# "workflows para cada um dos 5 microsservicos" sem duplicar 200 linhas.
+#
+# ESTAGIOS (na ordem exigida pelo desafio):
+#   1. build-test    - compila e roda testes
+#   2. lint          - golangci-lint
+#   3. security      - SCA (Trivy fs) + SAST (gosec)   <- BLOQUEIA em CRITICAL
+#   4. docker        - build, scan da imagem, push no ECR
+#   5. update-gitops - troca a tag no manifesto (so na main)
+#
+# REGRA CENTRAL DO GITOPS: os estagios 4 e 5 SO rodam na main. Em Pull
+# Request, o pipeline valida tudo mas nao publica nada. E o CI nunca,
+# em hipotese alguma, roda kubectl.
+# ============================================================================
+
+name: Reusable CI
+
+on:
+  workflow_call:
+    inputs:
+      service:
+        description: "Nome do microsservico, ex: auth-service"
+        required: true
+        type: string
+      go_version:
+        required: false
+        type: string
+        default: "1.23"
+
+# OIDC: precisa de id-token para pegar credenciais AWS sem access key.
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: toggle-master/${{ inputs.service }}
+  SERVICE_PATH: microservices/${{ inputs.service }}
+
+jobs:
+  # =========================================================================
+  # 1. BUILD & UNIT TEST
+  # =========================================================================
+  build-test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ inputs.go_version }}
+          cache-dependency-path: ${{ env.SERVICE_PATH }}/go.sum
+
+      - name: Build
+        working-directory: ${{ env.SERVICE_PATH }}
+        run: go build -v ./...
+
+      - name: Unit tests
+        working-directory: ${{ env.SERVICE_PATH }}
+        # `|| true` no final NAO. Se o teste quebra, o pipeline quebra.
+        run: go test -v -race -coverprofile=coverage.out ./...
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ inputs.service }}
+          path: ${{ env.SERVICE_PATH }}/coverage.out
+          if-no-files-found: ignore
+
+  # =========================================================================
+  # 2. LINTER / STATIC ANALYSIS
+  # =========================================================================
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ inputs.go_version }}
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          working-directory: ${{ env.SERVICE_PATH }}
+          args: --timeout=5m
+
+  # =========================================================================
+  # 3. SECURITY SCAN - SCA + SAST
+  #
+  # ESTE E O JOB QUE VOCE VAI DEMONSTRAR NO VIDEO FALHANDO.
+  #
+  # SCA = analisa suas DEPENDENCIAS (go.mod). Acha CVE em biblioteca de
+  #       terceiro. E exatamente a dor do enunciado: "uma vulnerabilidade em
+  #       uma biblioteca Go passou despercebida e foi para producao".
+  #
+  # SAST = analisa o SEU codigo fonte. Acha SQL injection, credencial
+  #        hardcoded, uso de crypto fraca.
+  # =========================================================================
+  security:
+    name: Security (SCA + SAST)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ---- SCA: vulnerabilidades nas dependencias ----
+      - name: Trivy filesystem scan (SCA)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: ${{ env.SERVICE_PATH }}
+          format: table
+          severity: CRITICAL,HIGH
+          # exit-code: 1 = O PIPELINE FALHA. Sem isto o Trivy so imprime o
+          # relatorio e segue em frente, e a regra de bloqueio do desafio
+          # nao esta implementada de verdade.
+          exit-code: "1"
+          # So bloqueia vulnerabilidade que ja tem correcao disponivel.
+          # Sem isto voce trava o pipeline em CVE que ninguem consegue arrumar.
+          ignore-unfixed: true
+
+      # Formato SARIF alimenta a aba Security do GitHub. Roda mesmo se o
+      # passo anterior falhou (if: always()), para voce ver o relatorio.
+      - name: Trivy SARIF report
+        if: always()
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: ${{ env.SERVICE_PATH }}
+          format: sarif
+          output: trivy-fs.sarif
+          severity: CRITICAL,HIGH
+
+      - name: Upload SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-fs.sarif
+          category: trivy-fs-${{ inputs.service }}
+        continue-on-error: true
+
+      # ---- SAST: vulnerabilidades no seu codigo ----
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ inputs.go_version }}
+
+      - name: gosec (SAST)
+        working-directory: ${{ env.SERVICE_PATH }}
+        run: |
+          go install github.com/securego/gosec/v2/cmd/gosec@latest
+          gosec -severity high -confidence medium ./...
+
+  # =========================================================================
+  # 4. DOCKER BUILD, SCAN & PUSH
+  #
+  # `needs` garante que so chega aqui se build, lint e security passaram.
+  # `if` garante que so publica na main - em PR, o pipeline para no job 3.
+  # =========================================================================
+  docker:
+    name: Docker Build & Push
+    runs-on: ubuntu-latest
+    needs: [build-test, lint, security]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    outputs:
+      image_tag: ${{ steps.meta.outputs.tag }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Tag = data + hash curto do commit, ex: 20260812-a1b2c3d
+      # NUNCA :latest. O ECR esta como IMMUTABLE e o ArgoCD precisa que a
+      # tag mude para detectar que ha algo novo.
+      - name: Gerar tag da imagem
+        id: meta
+        run: echo "tag=$(date +%Y%m%d)-$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      # Aqui acontece a magica do OIDC: nenhuma access key envolvida.
+      - name: Configurar credenciais AWS (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login no ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # Build LOCAL primeiro (load: true, push: false). O scan precisa
+      # acontecer ANTES do push - de nada adianta escanear depois que a
+      # imagem vulneravel ja esta no registry.
+      - name: Build da imagem
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ env.SERVICE_PATH }}
+          load: true
+          push: false
+          tags: ${{ inputs.service }}:${{ steps.meta.outputs.tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Trivy container scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: image
+          image-ref: ${{ inputs.service }}:${{ steps.meta.outputs.tag }}
+          format: table
+          severity: CRITICAL
+          exit-code: "1"
+          ignore-unfixed: true
+
+      # So chega aqui se a imagem passou no scan.
+      - name: Push para o ECR
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+          TAG: ${{ steps.meta.outputs.tag }}
+        run: |
+          docker tag ${{ inputs.service }}:$TAG $REGISTRY/${{ env.ECR_REPOSITORY }}:$TAG
+          docker push $REGISTRY/${{ env.ECR_REPOSITORY }}:$TAG
+          echo "Imagem publicada: $REGISTRY/${{ env.ECR_REPOSITORY }}:$TAG"
+
+  # =========================================================================
+  # 5. UPDATE GITOPS
+  #
+  # O PASSO MAIS IMPORTANTE DO DESAFIO. Repare no que ele NAO faz:
+  # nao roda kubectl, nao fala com o cluster, nao faz deploy.
+  # Ele so edita um arquivo YAML e commita.
+  #
+  # Quem faz o deploy e o ArgoCD, que esta observando este repositorio.
+  # =========================================================================
+  update-gitops:
+    name: Atualizar manifesto GitOps
+    runs-on: ubuntu-latest
+    needs: docker
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITOPS_TOKEN }}
+          ref: main
+
+      - name: Instalar yq
+        run: |
+          sudo wget -qO /usr/local/bin/yq \
+            https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+
+      - name: Atualizar tag da imagem no deployment
+        env:
+          TAG: ${{ needs.docker.outputs.image_tag }}
+          SERVICE: ${{ inputs.service }}
+        run: |
+          IMAGE="${{ secrets.ECR_REGISTRY }}/toggle-master/${SERVICE}:${TAG}"
+          FILE="gitops/${SERVICE}/deployment.yaml"
+
+          yq -i ".spec.template.spec.containers[0].image = \"${IMAGE}\"" "$FILE"
+
+          echo "--- diff ---"
+          git diff "$FILE"
+
+      - name: Commit e push
+        env:
+          TAG: ${{ needs.docker.outputs.image_tag }}
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add gitops/
+
+          # Se nada mudou, sai sem erro (evita falhar em re-execucao)
+          git diff --staged --quiet && echo "Nada a commitar" && exit 0
+
+          # [skip ci] e o CINTO DE SEGURANCA contra loop infinito:
+          # este commit nao deve disparar o pipeline de novo.
+          git commit -m "chore(${{ inputs.service }}): bump image to ${TAG} [skip ci]"
+          git push

@@ -1,0 +1,39 @@
+# ============================================================================
+# CI do targeting-service
+#
+# Este arquivo e proposital e intencionalmente FINO. Toda a logica esta em
+# reusable-ci.yml. Aqui so ficam os GATILHOS.
+#
+# O `paths:` e OBRIGATORIO num monorepo, por dois motivos:
+#   1. Sem ele, mexer no auth-service dispara os 5 pipelines (desperdicio).
+#   2. Sem ele, o commit automatico em gitops/ dispara o CI de novo -> LOOP.
+#      Repare que 'gitops/**' NAO esta na lista de paths. E de proposito.
+# ============================================================================
+
+name: targeting-service CI
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'microservices/targeting-service/**'
+      - '.github/workflows/targeting-ci.yml'
+      - '.github/workflows/reusable-ci.yml'
+
+  push:
+    branches: [main]
+    paths:
+      - 'microservices/targeting-service/**'
+      - '.github/workflows/targeting-ci.yml'
+      - '.github/workflows/reusable-ci.yml'
+
+  # Permite rodar manualmente pelo botao na aba Actions.
+  # Muito util na hora de gravar o video.
+  workflow_dispatch:
+
+jobs:
+  ci:
+    uses: ./.github/workflows/reusable-ci.yml
+    with:
+      service: targeting-service
+    secrets: inherit
