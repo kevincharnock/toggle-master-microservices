@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: analytics-service
+  namespace: default
+  labels:
+    app: analytics-service
+
+spec:
+  type: ClusterIP
+
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+      protocol: TCP
+
+  selector:
+    app: analytics-service
