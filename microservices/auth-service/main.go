@@ -17,6 +17,9 @@ type App struct {
 }
 
 func main() {
+
+	const jwtSecret = "hardcoded-secret-key-123"
+
 	// Carrega o .env para desenvolvimento local. Em produção, isso não fará nada.
 	_ = godotenv.Load()
 
