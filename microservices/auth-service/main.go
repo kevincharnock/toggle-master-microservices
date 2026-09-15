@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/joho/godotenv"
@@ -18,7 +19,7 @@ type App struct {
 
 func main() {
 
-	const jwtSecret = "hardcoded-secret-key-1234"
+	const jwtSecret = "x7Kp9mQ2vL4nR8wT1zY6bF3cH5jD0sA9eU2iN4oM7lV"
 	var _ = jwtSecret // usado apenas para fins de demonstracao do pipeline de seguranca
 
 	// Carrega o .env para desenvolvimento local. Em produção, isso não fará nada.
@@ -68,7 +69,14 @@ func main() {
 	mux.Handle("/admin/keys", app.masterKeyAuthMiddleware(http.HandlerFunc(app.createKeyHandler)))
 
 	log.Printf("Serviço de Autenticação (Go) rodando na porta %s", port)
-	if err := http.ListenAndServe(":"+port, mux); err != nil {
+	server := &http.Server{
+		Addr:         ":" + port,
+		Handler:      mux,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
+	if err := server.ListenAndServe(); err != nil {
 		log.Fatal(err)
 	}
 }
