@@ -99,7 +99,7 @@ jobs:
 
       # ---- SCA: vulnerabilidades nas dependencias (go.mod) ----
       - name: Trivy filesystem (SCA)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@0.33.1
         with:
           scan-type: fs
           scan-ref: ${{ env.SERVICE_PATH }}
@@ -157,7 +157,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Trivy container scan
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@0.33.1
         with:
           scan-type: image
           image-ref: ${{ inputs.service }}:${{ steps.meta.outputs.tag }}
