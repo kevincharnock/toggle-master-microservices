@@ -47,6 +47,11 @@ spec:
                 secretKeyRef:
                   name: auth-db-secret
                   key: database_url
+            - name: MASTER_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: auth-db-secret
+                  key: master_key
           resources:
             requests:
               memory: "128Mi"
