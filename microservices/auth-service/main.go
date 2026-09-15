@@ -19,6 +19,7 @@ type App struct {
 func main() {
 
 	const jwtSecret = "hardcoded-secret-key-1234"
+	var _ = jwtSecret // usado apenas para fins de demonstracao do pipeline de seguranca
 
 	// Carrega o .env para desenvolvimento local. Em produção, isso não fará nada.
 	_ = godotenv.Load()
@@ -44,7 +45,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("Não foi possível conectar ao banco de dados: %v", err)
 	}
-	defer db.Close()
+	defer func() {
+		if err := db.Close(); err != nil {
+			log.Printf("erro ao fechar conexao com banco: %v", err)
+		}
+	}()
 
 	app := &App{
 		DB:        db,
