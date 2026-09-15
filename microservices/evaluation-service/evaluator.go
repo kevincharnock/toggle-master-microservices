@@ -150,7 +150,11 @@ func (a *App) fetchRule(flagName string) (*TargetingRule, error) {
 	if err != nil {
 		return nil, fmt.Errorf("erro ao chamar targeting-service: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.Printf("erro ao fechar body: %v", err)
+		}
+	}()
 
 	if resp.StatusCode == http.StatusNotFound {
 		return nil, &NotFoundError{flagName} // Não é um erro fatal
