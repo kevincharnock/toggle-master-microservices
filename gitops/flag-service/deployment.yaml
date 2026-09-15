@@ -42,28 +42,13 @@ spec:
               containerPort: 8080
               protocol: TCP
           env:
-            - name: DB_HOST
+            - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
                   name: flag-db-secret
-                  key: host
-            - name: DB_PORT
-              valueFrom:
-                secretKeyRef:
-                  name: flag-db-secret
-                  key: port
-            - name: DB_USER
-              valueFrom:
-                secretKeyRef:
-                  name: flag-db-secret
-                  key: username
-            - name: DB_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: flag-db-secret
-                  key: password
-            - name: DB_NAME
-              value: "flag"
+                  key: database_url
+            - name: AUTH_SERVICE_URL
+              value: "http://auth-service:8080"
           resources:
             requests:
               memory: "128Mi"

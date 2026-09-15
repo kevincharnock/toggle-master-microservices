@@ -85,9 +85,10 @@ metadata:
   name: evaluation-config
   namespace: default
 data:
-  REDIS_HOST: "toggle-master-dev-redis.5xmkjq.ng.0001.use1.cache.amazonaws.com"
-  REDIS_PORT: "6379"
-  SQS_QUEUE_URL: "https://sqs.us-east-1.amazonaws.com/604218333422/toggle-master-dev-events"
+  REDIS_URL: "redis://toggle-master-dev-redis.5xmkjq.ng.0001.use1.cache.amazonaws.com:6379"
+  FLAG_SERVICE_URL: "http://flag-service:8080"
+  TARGETING_SERVICE_URL: "http://targeting-service:8080"
+  AWS_SQS_URL: "https://sqs.us-east-1.amazonaws.com/604218333422/toggle-master-dev-events"
   AWS_REGION: "us-east-1"
 spec:
   template:

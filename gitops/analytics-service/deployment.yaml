@@ -86,9 +86,9 @@ metadata:
   name: analytics-config
   namespace: default
 data:
-  DYNAMODB_TABLE: "ToggleMasterAnalytics"
+  AWS_DYNAMODB_TABLE: "ToggleMasterAnalytics"
   AWS_REGION: "us-east-1"
-  SQS_QUEUE_URL: "https://sqs.us-east-1.amazonaws.com/604218333422/toggle-master-dev-events"
+  AWS_SQS_URL: "https://sqs.us-east-1.amazonaws.com/604218333422/toggle-master-dev-events"
 spec:
   template:
     spec:
