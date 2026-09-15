@@ -39,7 +39,7 @@ spec:
           imagePullPolicy: Always
           ports:
             - name: http
-              containerPort: 8080
+              containerPort: 8001
               protocol: TCP
           env:
             - name: DATABASE_URL
@@ -63,14 +63,14 @@ spec:
           livenessProbe:
             httpGet:
               path: /health
-              port: 8080
+              port: 8001
             initialDelaySeconds: 15
             periodSeconds: 20
           # Readiness: se falhar, o pod para de receber trafego (mas nao reinicia)
           readinessProbe:
             httpGet:
               path: /health
-              port: 8080
+              port: 8001
             initialDelaySeconds: 5
             periodSeconds: 10
 ---

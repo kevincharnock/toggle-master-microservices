@@ -40,7 +40,7 @@ spec:
           imagePullPolicy: Always
           ports:
             - name: http
-              containerPort: 8080
+              containerPort: 8004
               protocol: TCP
           envFrom:
             - configMapRef:
@@ -55,13 +55,13 @@ spec:
           livenessProbe:
             httpGet:
               path: /health
-              port: 8080
+              port: 8004
             initialDelaySeconds: 15
             periodSeconds: 20
           readinessProbe:
             httpGet:
               path: /health
-              port: 8080
+              port: 8004
             initialDelaySeconds: 5
             periodSeconds: 10
 ---
@@ -86,8 +86,8 @@ metadata:
   namespace: default
 data:
   REDIS_URL: "redis://toggle-master-dev-redis.5xmkjq.ng.0001.use1.cache.amazonaws.com:6379"
-  FLAG_SERVICE_URL: "http://flag-service:8080"
-  TARGETING_SERVICE_URL: "http://targeting-service:8080"
+  FLAG_SERVICE_URL: "http://flag-service:8002"
+  TARGETING_SERVICE_URL: "http://targeting-service:8003"
   AWS_SQS_URL: "https://sqs.us-east-1.amazonaws.com/604218333422/toggle-master-dev-events"
   AWS_REGION: "us-east-1"
 spec:

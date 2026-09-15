@@ -40,7 +40,7 @@ spec:
           imagePullPolicy: Always
           ports:
             - name: http
-              containerPort: 8080
+              containerPort: 8005
               protocol: TCP
           envFrom:
             - configMapRef:
@@ -55,13 +55,13 @@ spec:
           livenessProbe:
             httpGet:
               path: /health
-              port: 8080
+              port: 8005
             initialDelaySeconds: 15
             periodSeconds: 20
           readinessProbe:
             httpGet:
               path: /health
-              port: 8080
+              port: 8005
             initialDelaySeconds: 5
             periodSeconds: 10
 ---

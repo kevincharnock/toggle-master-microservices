@@ -11,8 +11,8 @@ spec:
 
   ports:
     - name: http
-      port: 8080
-      targetPort: 8080
+      port: 8005
+      targetPort: 8005
       protocol: TCP
 
   selector:

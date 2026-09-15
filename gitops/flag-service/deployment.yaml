@@ -39,7 +39,7 @@ spec:
           imagePullPolicy: Always
           ports:
             - name: http
-              containerPort: 8080
+              containerPort: 8002
               protocol: TCP
           env:
             - name: DATABASE_URL
@@ -48,7 +48,7 @@ spec:
                   name: flag-db-secret
                   key: database_url
             - name: AUTH_SERVICE_URL
-              value: "http://auth-service:8080"
+              value: "http://auth-service:8001"
           resources:
             requests:
               memory: "128Mi"
@@ -60,14 +60,14 @@ spec:
           livenessProbe:
             httpGet:
               path: /health
-              port: 8080
+              port: 8002
             initialDelaySeconds: 15
             periodSeconds: 20
           # Readiness: se falhar, o pod para de receber trafego (mas nao reinicia)
           readinessProbe:
             httpGet:
               path: /health
-              port: 8080
+              port: 8002
             initialDelaySeconds: 5
             periodSeconds: 10
 ---
