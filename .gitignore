@@ -1,0 +1,13 @@
+*.exe
+*.tar.gz
+microservices/*/auth-service
+microservices/*/evaluation-service
+microservices/*/flag-service
+microservices/*/targeting-service
+microservices/*/analytics-service
+**/.terraform/
+**/.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example

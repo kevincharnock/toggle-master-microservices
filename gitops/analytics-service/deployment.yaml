@@ -1,0 +1,100 @@
+# ============================================================================
+# Deployment do analytics-service
+#
+# Consome DynamoDB. Repare que NAO ha credencial AWS aqui - em producao voce
+# usaria IRSA (a ServiceAccount recebe uma role IAM via anotacao) para o pod
+# acessar o DynamoDB sem chave estatica. Ver o comentario na ServiceAccount.
+# ============================================================================
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: analytics-service
+  namespace: default
+  labels:
+    app: analytics-service
+
+spec:
+  replicas: 2
+
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+
+  selector:
+    matchLabels:
+      app: analytics-service
+
+  template:
+    metadata:
+      labels:
+        app: analytics-service
+
+    spec:
+      serviceAccountName: analytics-service
+
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+
+      containers:
+        - name: analytics-service
+          # >>> ESTA LINHA E REESCRITA PELO CI <<<
+          image: 123456789012.dkr.ecr.us-east-1.amazonaws.com/toggle-master/analytics-service:placeholder
+          imagePullPolicy: Always
+
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+
+          envFrom:
+            - configMapRef:
+                name: analytics-config
+
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
+
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 20
+
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: analytics-service
+  namespace: default
+  # Para IRSA (pod acessando DynamoDB sem chave estatica), descomente e
+  # preencha com a role criada no Terraform:
+  # annotations:
+  #   eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/analytics-dynamodb
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: analytics-config
+  namespace: default
+data:
+  DYNAMODB_TABLE: "ToggleMasterAnalytics"
+  AWS_REGION: "us-east-1"
+  SQS_QUEUE_URL: "PREENCHER-COM-terraform-output-sqs_queue_url"

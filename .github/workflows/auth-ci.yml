@@ -1,0 +1,29 @@
+# CI do auth-service (Go)
+# Arquivo fino: so os gatilhos. A logica esta em reusable-ci-go.yml.
+name: auth-service CI
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'microservices/auth-service/**'
+      - '.github/workflows/auth-ci.yml'
+      - '.github/workflows/reusable-ci-go.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'microservices/auth-service/**'
+      - '.github/workflows/auth-ci.yml'
+      - '.github/workflows/reusable-ci-go.yml'
+  workflow_dispatch:   # permite rodar manualmente pelo botao (util na gravacao)
+
+permissions:
+  id-token: write
+  contents: write
+
+jobs:
+  ci:
+    uses: ./.github/workflows/reusable-ci-go.yml
+    with:
+      service: auth-service
+    secrets: inherit

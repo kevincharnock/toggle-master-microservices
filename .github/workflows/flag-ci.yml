@@ -1,0 +1,29 @@
+# CI do flag-service (Python)
+# Arquivo fino: so os gatilhos. A logica esta em reusable-ci-python.yml.
+name: flag-service CI
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'microservices/flag-service/**'
+      - '.github/workflows/flag-ci.yml'
+      - '.github/workflows/reusable-ci-python.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'microservices/flag-service/**'
+      - '.github/workflows/flag-ci.yml'
+      - '.github/workflows/reusable-ci-python.yml'
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: write
+
+jobs:
+  ci:
+    uses: ./.github/workflows/reusable-ci-python.yml
+    with:
+      service: flag-service
+    secrets: inherit

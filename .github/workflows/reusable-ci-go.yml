@@ -1,0 +1,221 @@
+# ============================================================================
+# WORKFLOW REUTILIZAVEL - SERVICOS EM GO  (auth-service, evaluation-service)
+#
+# Toda a logica de CI/DevSecOps para Go mora aqui. Os workflows por servico
+# (auth-ci.yml, evaluation-ci.yml) so chamam este arquivo.
+#
+# ESTAGIOS:
+#   1. build-test    - go build + go test
+#   2. lint          - golangci-lint
+#   3. security      - SCA (Trivy fs) + SAST (gosec)   <- BLOQUEIA em CRITICAL
+#   4. docker        - build, scan da imagem, push ECR  (so na main)
+#   5. update-gitops - troca a tag no manifesto          (so na main)
+# ============================================================================
+
+name: Reusable CI (Go)
+
+on:
+  workflow_call:
+    inputs:
+      service:
+        description: "Nome do microsservico, ex: auth-service"
+        required: true
+        type: string
+      go_version:
+        required: false
+        type: string
+        default: "1.23"
+
+permissions:
+  id-token: write   # necessario para OIDC (login AWS sem access key)
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: toggle-master/${{ inputs.service }}
+  SERVICE_PATH: microservices/${{ inputs.service }}
+
+jobs:
+  # =========================================================================
+  # 1. BUILD & UNIT TEST
+  # =========================================================================
+  build-test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ inputs.go_version }}
+          cache-dependency-path: ${{ env.SERVICE_PATH }}/go.sum
+
+      - name: Build
+        working-directory: ${{ env.SERVICE_PATH }}
+        run: go build -v ./...
+
+      - name: Unit tests
+        working-directory: ${{ env.SERVICE_PATH }}
+        # Se nao houver testes, o go test passa vazio (nao falha).
+        run: go test -v ./...
+
+  # =========================================================================
+  # 2. LINT
+  # =========================================================================
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ inputs.go_version }}
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v7
+        with:
+          version: v2.10.1
+          working-directory: ${{ env.SERVICE_PATH }}
+          args: --timeout=5m
+
+  # =========================================================================
+  # 3. SECURITY - SCA (dependencias) + SAST (codigo)
+  #
+  # ESTE JOB E O QUE VOCE VAI DEMONSTRAR FALHANDO NO VIDEO.
+  #
+  # Para a demo, a forma mais confiavel e uma CREDENCIAL HARDCODED. O gosec
+  # detecta como G101. Basta adicionar em qualquer .go do servico:
+  #
+  #   const jwtSecret = "hardcoded-secret-key-123"
+  #
+  # Commit -> pipeline falha aqui. Remove -> pipeline passa.
+  # =========================================================================
+  security:
+    name: Security (SCA + SAST)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # ---- SCA: vulnerabilidades nas dependencias (go.mod) ----
+      - name: Trivy filesystem (SCA)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: ${{ env.SERVICE_PATH }}
+          format: table
+          severity: CRITICAL,HIGH
+          exit-code: "1"          # <- FAZ O PIPELINE FALHAR
+          ignore-unfixed: true    # so bloqueia o que tem correcao disponivel
+
+      # ---- SAST: vulnerabilidades no seu codigo Go ----
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ inputs.go_version }}
+
+      - name: gosec (SAST)
+        working-directory: ${{ env.SERVICE_PATH }}
+        run: |
+          go install github.com/securego/gosec/v2/cmd/gosec@latest
+          gosec -severity medium -confidence medium ./...
+
+  # =========================================================================
+  # 4. DOCKER BUILD, SCAN & PUSH  (so na main)
+  # =========================================================================
+  docker:
+    name: Docker Build & Push
+    runs-on: ubuntu-latest
+    needs: [build-test, lint, security]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    outputs:
+      image_tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Gerar tag (data + hash do commit)
+        id: meta
+        run: echo "tag=$(date +%Y%m%d)-$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Login AWS via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login no ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build da imagem (local, sem push ainda)
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ env.SERVICE_PATH }}
+          load: true
+          push: false
+          tags: ${{ inputs.service }}:${{ steps.meta.outputs.tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Trivy container scan
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: image
+          image-ref: ${{ inputs.service }}:${{ steps.meta.outputs.tag }}
+          format: table
+          severity: CRITICAL
+          exit-code: "1"
+          ignore-unfixed: true
+
+      - name: Push para o ECR
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+          TAG: ${{ steps.meta.outputs.tag }}
+        run: |
+          docker tag ${{ inputs.service }}:$TAG $REGISTRY/${{ env.ECR_REPOSITORY }}:$TAG
+          docker push $REGISTRY/${{ env.ECR_REPOSITORY }}:$TAG
+          echo "Publicado: $REGISTRY/${{ env.ECR_REPOSITORY }}:$TAG"
+
+  # =========================================================================
+  # 5. UPDATE GITOPS  (so na main)
+  #
+  # NAO roda kubectl. So edita um YAML e commita. O ArgoCD faz o resto.
+  # =========================================================================
+  update-gitops:
+    name: Atualizar manifesto GitOps
+    runs-on: ubuntu-latest
+    needs: docker
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITOPS_TOKEN }}
+          ref: main
+
+      - name: Instalar yq
+        run: |
+          sudo wget -qO /usr/local/bin/yq \
+            https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+
+      - name: Atualizar a tag da imagem no deployment
+        env:
+          TAG: ${{ needs.docker.outputs.image_tag }}
+          SERVICE: ${{ inputs.service }}
+        run: |
+          IMAGE="${{ secrets.ECR_REGISTRY }}/toggle-master/${SERVICE}:${TAG}"
+          FILE="gitops/${SERVICE}/deployment.yaml"
+          yq -i ".spec.template.spec.containers[0].image = \"${IMAGE}\"" "$FILE"
+          echo "--- diff ---"; git diff "$FILE"
+
+      - name: Commit e push
+        env:
+          TAG: ${{ needs.docker.outputs.image_tag }}
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add gitops/
+          git diff --staged --quiet && echo "Nada a commitar" && exit 0
+          git commit -m "chore(${{ inputs.service }}): bump image to ${TAG} [skip ci]"
+          git push

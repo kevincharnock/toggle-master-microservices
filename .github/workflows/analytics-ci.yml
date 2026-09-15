@@ -1,0 +1,29 @@
+# CI do analytics-service (Python)
+# Arquivo fino: so os gatilhos. A logica esta em reusable-ci-python.yml.
+name: analytics-service CI
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'microservices/analytics-service/**'
+      - '.github/workflows/analytics-ci.yml'
+      - '.github/workflows/reusable-ci-python.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'microservices/analytics-service/**'
+      - '.github/workflows/analytics-ci.yml'
+      - '.github/workflows/reusable-ci-python.yml'
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: write
+
+jobs:
+  ci:
+    uses: ./.github/workflows/reusable-ci-python.yml
+    with:
+      service: analytics-service
+    secrets: inherit
