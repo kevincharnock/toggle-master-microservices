@@ -79,8 +79,3 @@ kind: ServiceAccount
 metadata:
   name: auth-service
   namespace: default
-spec:
-  template:
-    spec:
-      containers:
-        - image: 604218333422.dkr.ecr.us-east-1.amazonaws.com/toggle-master/auth-service:20260915-0275f92

@@ -76,8 +76,3 @@ kind: ServiceAccount
 metadata:
   name: targeting-service
   namespace: default
-spec:
-  template:
-    spec:
-      containers:
-        - image: 604218333422.dkr.ecr.us-east-1.amazonaws.com/toggle-master/targeting-service:20260915-5e44a10

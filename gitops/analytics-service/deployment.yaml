@@ -74,11 +74,6 @@ metadata:
   # preencha com a role criada no Terraform:
   # annotations:
   #   eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/analytics-dynamodb
-spec:
-  template:
-    spec:
-      containers:
-        - image: 604218333422.dkr.ecr.us-east-1.amazonaws.com/toggle-master/analytics-service:20260915-5e44a10
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -89,8 +84,3 @@ data:
   AWS_DYNAMODB_TABLE: "ToggleMasterAnalytics"
   AWS_REGION: "us-east-1"
   AWS_SQS_URL: "https://sqs.us-east-1.amazonaws.com/604218333422/toggle-master-dev-events"
-spec:
-  template:
-    spec:
-      containers:
-        - image: 604218333422.dkr.ecr.us-east-1.amazonaws.com/toggle-master/analytics-service:20260915-5e44a10

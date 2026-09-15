@@ -70,11 +70,6 @@ kind: ServiceAccount
 metadata:
   name: evaluation-service
   namespace: default
-spec:
-  template:
-    spec:
-      containers:
-        - image: 604218333422.dkr.ecr.us-east-1.amazonaws.com/toggle-master/evaluation-service:20260915-5e44a10
 ---
 # ConfigMap: preencha com os outputs do terraform
 #   terraform output redis_endpoint
@@ -90,8 +85,3 @@ data:
   TARGETING_SERVICE_URL: "http://targeting-service:8003"
   AWS_SQS_URL: "https://sqs.us-east-1.amazonaws.com/604218333422/toggle-master-dev-events"
   AWS_REGION: "us-east-1"
-spec:
-  template:
-    spec:
-      containers:
-        - image: 604218333422.dkr.ecr.us-east-1.amazonaws.com/toggle-master/evaluation-service:20260915-5e44a10
