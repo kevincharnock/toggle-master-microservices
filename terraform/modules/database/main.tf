@@ -17,6 +17,15 @@
 # SUBNET GROUPS - dizem a AWS em quais subnets o banco pode nascer.
 # Sempre PRIVADAS: banco nunca deve ter IP publico.
 # ---------------------------------------------------------------------------
+
+locals {
+  # "flag" e palavra reservada na RDS para PostgreSQL. So ele recebe nome diferente.
+  postgres_db_names = {
+    for svc in var.postgres_databases :
+    svc => svc == "flag" ? "flagdb" : svc
+  }
+}
+
 resource "aws_db_subnet_group" "postgres" {
   name       = "${var.name}-postgres"
   subnet_ids = var.private_subnet_ids
@@ -157,7 +166,7 @@ resource "aws_db_instance" "postgres" {
   storage_type          = "gp3"
   storage_encrypted     = true
 
-  db_name  = each.key
+  db_name  = local.postgres_db_names[each.key]
   username = var.postgres_username
   password = random_password.postgres[each.key].result
 
