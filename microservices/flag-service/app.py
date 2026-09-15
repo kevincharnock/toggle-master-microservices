@@ -172,7 +172,7 @@ def update_flag(name):
     
     values.append(name) # Adiciona o 'name' para a cláusula WHERE
     
-    query = f"UPDATE flags SET {', '.join(fields)} WHERE name = %s RETURNING *"
+    query = f"UPDATE flags SET {', '.join(fields)} WHERE name = %s RETURNING *"  # nosec B608 -- campos vem de lista fixa no codigo, nao de input do usuario
     
     conn = None
     cur = None
