@@ -62,8 +62,10 @@ data "aws_iam_policy_document" "assume_role" {
     condition {
       test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
-      # ex: repo:kevincharnock/toggle-master-microservices:*
-      values = ["repo:${var.github_org}/${var.github_repo}:*"]
+      values = [
+        "repo:${var.github_org}/${var.github_repo}:*",                    # formato classico (repos antigos)
+        "repo:kevincharnock@48034956/toggle-master-microservices@1329891103:*",  # formato imutavel (repos novos)
+      ]
     }
   }
 }
