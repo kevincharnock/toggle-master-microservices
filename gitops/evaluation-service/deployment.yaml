@@ -85,9 +85,9 @@ metadata:
   name: evaluation-config
   namespace: default
 data:
-  REDIS_HOST: "PREENCHER-COM-terraform-output-redis_endpoint"
+  REDIS_HOST: "toggle-master-dev-redis.5xmkjq.ng.0001.use1.cache.amazonaws.com"
   REDIS_PORT: "6379"
-  SQS_QUEUE_URL: "PREENCHER-COM-terraform-output-sqs_queue_url"
+  SQS_QUEUE_URL: "https://sqs.us-east-1.amazonaws.com/604218333422/toggle-master-dev-events"
   AWS_REGION: "us-east-1"
 spec:
   template:
