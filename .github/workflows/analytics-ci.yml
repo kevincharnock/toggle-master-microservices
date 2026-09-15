@@ -17,6 +17,10 @@ on:
       - '.github/workflows/reusable-ci-python.yml'
   workflow_dispatch:
 
+permissions:
+  id-token: write
+  contents: write
+
 jobs:
   ci:
     uses: ./.github/workflows/reusable-ci-python.yml

@@ -17,6 +17,10 @@ on:
       - '.github/workflows/reusable-ci-go.yml'
   workflow_dispatch:   # permite rodar manualmente pelo botao (util na gravacao)
 
+permissions:
+  id-token: write
+  contents: write
+
 jobs:
   ci:
     uses: ./.github/workflows/reusable-ci-go.yml
