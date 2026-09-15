@@ -36,10 +36,13 @@ module "eks" {
 
   # Addons essenciais. O EKS nao vem com rede nem DNS funcionando por padrao.
   addons = {
-    coredns                = {} # DNS interno do cluster
-    kube-proxy             = {} # roteamento de Services
-    vpc-cni                = {} # rede dos pods (da IP da VPC para cada pod)
-    eks-pod-identity-agent = {} # permite pods assumirem roles IAM
+    vpc-cni = {
+      before_compute = true
+      most_recent    = true
+    }
+    coredns                = {}
+    kube-proxy             = {}
+    eks-pod-identity-agent = {}
   }
 
   eks_managed_node_groups = {
@@ -47,6 +50,8 @@ module "eks" {
       # ON_DEMAND e mais caro que SPOT, mas SPOT pode ser encerrado pela AWS
       # no meio da sua gravacao. Para o video, prefira ON_DEMAND.
       capacity_type = var.capacity_type
+
+      ami_type = "AL2023_x86_64_STANDARD"
 
       instance_types = var.instance_types
 
