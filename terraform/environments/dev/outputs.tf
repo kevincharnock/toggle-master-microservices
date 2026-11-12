@@ -41,3 +41,13 @@ output "sqs_queue_url" {
 output "dynamodb_table_name" {
   value = module.database.dynamodb_table_name
 }
+
+output "evaluation_irsa_role_arn" {
+  description = "Role IRSA do evaluation-service (anotacao da ServiceAccount)"
+  value       = module.workload_iam.evaluation_role_arn
+}
+
+output "analytics_irsa_role_arn" {
+  description = "Role IRSA do analytics-service (anotacao da ServiceAccount)"
+  value       = module.workload_iam.analytics_role_arn
+}

@@ -115,3 +115,19 @@ module "github_oidc" {
 
   tags = local.tags
 }
+
+# ---------------------------------------------------------------------------
+# 7. IRSA - roles IAM para os pods do evaluation (SQS) e analytics (SQS + DynamoDB)
+# Os ARNs vao na anotacao eks.amazonaws.com/role-arn das ServiceAccounts em gitops/.
+# ---------------------------------------------------------------------------
+module "workload_iam" {
+  source = "../../modules/workload-iam"
+
+  name              = local.name
+  oidc_provider_arn = module.eks.oidc_provider_arn
+
+  sqs_queue_arn      = module.messaging.queue_arn
+  dynamodb_table_arn = module.database.dynamodb_table_arn
+
+  tags = local.tags
+}

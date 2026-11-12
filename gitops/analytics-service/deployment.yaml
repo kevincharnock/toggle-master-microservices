@@ -70,10 +70,9 @@ kind: ServiceAccount
 metadata:
   name: analytics-service
   namespace: default
-  # Para IRSA (pod acessando DynamoDB sem chave estatica), descomente e
-  # preencha com a role criada no Terraform:
-  # annotations:
-  #   eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/analytics-dynamodb
+  # IRSA: role criada em terraform/modules/workload-iam (SQS consume + DynamoDB PutItem)
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::604218333422:role/toggle-master-dev-analytics-irsa
 ---
 apiVersion: v1
 kind: ConfigMap

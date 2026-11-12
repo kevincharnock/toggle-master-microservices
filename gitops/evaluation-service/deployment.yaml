@@ -70,6 +70,9 @@ kind: ServiceAccount
 metadata:
   name: evaluation-service
   namespace: default
+  # IRSA: role criada em terraform/modules/workload-iam (sqs:SendMessage)
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::604218333422:role/toggle-master-dev-evaluation-irsa
 ---
 # ConfigMap: preencha com os outputs do terraform
 #   terraform output redis_endpoint

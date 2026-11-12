@@ -63,8 +63,9 @@ variable "node_instance_types" {
 }
 
 variable "node_desired_size" {
-  type    = number
-  default = 2
+  type = number
+  # 3 nos: a stack de observabilidade da Fase 4 precisa de memoria
+  default = 3
 }
 
 # ---- Aplicacao ----
