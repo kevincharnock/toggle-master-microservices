@@ -1,0 +1,81 @@
+# Self-healing: recebe o webhook do Grafana e reinicia o auth-service.
+# Imagem publica (espelho do Docker Hub no ECR Public, sem limite de pull):
+# o script vem do ConfigMap, entao nao ha build nem registry proprio.
+#
+# O Secret self-healing-secret (chave "token") e criado a mao, fora do git:
+#   kubectl -n observability create secret generic self-healing-secret --from-literal=token=...
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: self-healing
+  namespace: observability
+  labels:
+    app: self-healing
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: self-healing
+  template:
+    metadata:
+      labels:
+        app: self-healing
+    spec:
+      serviceAccountName: self-healing
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: self-healing
+          image: public.ecr.aws/docker/library/python:3.11-slim-bookworm
+          command: ["python", "-u", "/app/heal.py"]
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: PYTHONDONTWRITEBYTECODE
+              value: "1"
+            - name: HEAL_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: self-healing-secret
+                  key: token
+            - name: TARGET_NAMESPACE
+              value: default
+            - name: TARGET_DEPLOYMENT
+              value: auth-service
+            - name: ALLOWED_DEPLOYMENTS
+              value: auth-service
+            - name: COOLDOWN_SECONDS
+              value: "120"
+          volumeMounts:
+            - name: script
+              mountPath: /app
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 20m
+              memory: 48Mi
+            limits:
+              memory: 128Mi
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+      volumes:
+        - name: script
+          configMap:
+            name: self-healing-script

@@ -1,0 +1,13 @@
+# O ArgoCD detecta este arquivo e renderiza com kustomize. O script heal.py vira um
+# ConfigMap (com hash no nome: mudar o script reinicia o Deployment sozinho).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - rbac.yaml
+  - deployment.yaml
+  - service.yaml
+configMapGenerator:
+  - name: self-healing-script
+    namespace: observability
+    files:
+      - heal.py

@@ -1,0 +1,33 @@
+# RBAC minimo: o self-healing so enxerga e altera o Deployment auth-service no
+# namespace default. Nada de cluster-admin. "patch" e o verbo que o
+# `kubectl rollout restart` usa; "get" permite ler o estado antes/depois.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: self-healing
+  namespace: observability
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: self-healing-restart
+  namespace: default
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    resourceNames: ["auth-service"]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: self-healing-restart
+  namespace: default
+subjects:
+  - kind: ServiceAccount
+    name: self-healing
+    namespace: observability
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: self-healing-restart

@@ -59,6 +59,131 @@ spec:
               label: grafana_dashboard
               labelValue: "1"
               searchNamespace: ALL
+          # Segredos (PagerDuty, Discord, token do self-healing) ficam FORA do git: Secret
+          # criado a mao (grafana-alert-secrets) e injetado como variaveis de ambiente.
+          # O provisionamento do Grafana expande $VAR nos arquivos abaixo.
+          envFromSecrets:
+            - name: grafana-alert-secrets
+          # Alerting as code: contact points + regra + notification policy.
+          # Obs: o chart passa estes textos por tpl, por isso os templates do Grafana
+          # ({{ ... }}) vao dentro de raw strings do Helm: {{ `...` }}.
+          alerting:
+            contactpoints.yaml:
+              apiVersion: 1
+              contactPoints:
+                - orgId: 1
+                  name: pagerduty
+                  receivers:
+                    - uid: cp-pagerduty
+                      type: pagerduty
+                      settings:
+                        integrationKey: $PAGERDUTY_KEY
+                        severity: critical
+                        class: http-5xx
+                        component: auth-service
+                        group: togglemaster
+                - orgId: 1
+                  name: discord
+                  receivers:
+                    - uid: cp-discord
+                      type: discord
+                      settings:
+                        url: $DISCORD_WEBHOOK_URL
+                        title: ALERTA ToggleMaster
+                        message: |-
+                          {{ `**{{ .CommonLabels.alertname }}** - {{ .Status | toUpper }}
+                          {{ range .Alerts }}
+                          Servico: {{ .Labels.service }} | Severidade: {{ .Labels.severity }}
+                          Resumo: {{ .Annotations.summary }}
+                          Detalhe: {{ .Annotations.description }}
+                          Inicio: {{ .StartsAt.Format "15:04:05 02/01/2006" }}
+                          {{ end }}
+                          Acao automatica: o self-healing reinicia deployment/auth-service (rollout restart).` }}
+                - orgId: 1
+                  name: self-healing
+                  receivers:
+                    - uid: cp-self-healing
+                      type: webhook
+                      settings:
+                        url: http://self-healing.observability.svc:8080/heal
+                        httpMethod: POST
+                        authorization_scheme: Bearer
+                        authorization_credentials: $HEAL_TOKEN
+            policies.yaml:
+              apiVersion: 1
+              policies:
+                - orgId: 1
+                  receiver: discord
+                  group_by: ["alertname"]
+                  group_wait: 10s
+                  group_interval: 1m
+                  repeat_interval: 10m
+                  routes:
+                    # um alerta critical gera: incidente no PagerDuty + mensagem no Discord
+                    # + acionamento do self-healing (continue: true segue para o proximo)
+                    - receiver: pagerduty
+                      object_matchers: [["severity", "=", "critical"]]
+                      continue: true
+                    - receiver: self-healing
+                      object_matchers: [["heal", "=", "auto"]]
+                      continue: true
+                    - receiver: discord
+                      object_matchers: [["severity", "=", "critical"]]
+            rules.yaml:
+              apiVersion: 1
+              groups:
+                - orgId: 1
+                  name: togglemaster-slo
+                  folder: ToggleMaster
+                  interval: 30s
+                  rules:
+                    - uid: auth-5xx-rate
+                      title: "Auth-service: taxa de 5xx maior que 5%"
+                      condition: C
+                      for: 1m
+                      # sem trafego = sem dado: nao e incidente
+                      noDataState: OK
+                      execErrState: OK
+                      labels:
+                        severity: critical
+                        service: auth-service
+                        heal: auto
+                      annotations:
+                        summary: Taxa de erro 5xx do auth-service acima de 5% por mais de 1 minuto
+                        description: |-
+                          {{ `Taxa atual de 5xx: {{ printf "%.1f" $values.B.Value }}% (limite 5%). Origem: spans de erro do auth-service (OTel spanmetrics).` }}
+                      data:
+                        # A: percentual de spans de servidor com erro (5xx) nos ultimos 1m
+                        - refId: A
+                          relativeTimeRange:
+                            from: 300
+                            to: 0
+                          datasourceUid: prometheus
+                          model:
+                            refId: A
+                            instant: true
+                            expr: >-
+                              100 * (sum(rate(traces_span_metrics_calls_total{service_name="auth-service",span_kind="SPAN_KIND_SERVER",status_code="STATUS_CODE_ERROR"}[1m])) or vector(0))
+                              / sum(rate(traces_span_metrics_calls_total{service_name="auth-service",span_kind="SPAN_KIND_SERVER"}[1m]))
+                        - refId: B
+                          datasourceUid: __expr__
+                          model:
+                            refId: B
+                            type: reduce
+                            expression: A
+                            reducer: last
+                            settings:
+                              mode: dropNN
+                        - refId: C
+                          datasourceUid: __expr__
+                          model:
+                            refId: C
+                            type: threshold
+                            expression: B
+                            conditions:
+                              - evaluator:
+                                  type: gt
+                                  params: [5]
           additionalDataSources:
             - name: Loki
               uid: loki
