@@ -11,3 +11,10 @@ microservices/*/analytics-service
 *.tfstate.*
 *.tfvars
 !*.tfvars.example
+
+# planos binarios do terraform (podem conter valores sensiveis)
+*tfplan
+*.tfplan
+
+# instalador do helm baixado localmente (nao faz parte do projeto)
+get_helm.sh
