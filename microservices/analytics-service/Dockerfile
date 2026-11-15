@@ -10,4 +10,4 @@ COPY . .
 
 EXPOSE 8005
 
-CMD ["python", "app.py"]
+CMD ["opentelemetry-instrument", "python", "app.py"]

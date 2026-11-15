@@ -52,6 +52,15 @@ spec:
                 secretKeyRef:
                   name: auth-db-secret
                   key: master_key
+          # OpenTelemetry (Fase 4): telemetria vai para o OTel Collector gateway
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-gateway.observability.svc:4318"
+            - name: OTEL_EXPORTER_OTLP_PROTOCOL
+              value: "http/protobuf"
+            - name: OTEL_SERVICE_NAME
+              value: "auth-service"
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: "service.namespace=togglemaster,deployment.environment=dev"
           resources:
             requests:
               memory: "128Mi"

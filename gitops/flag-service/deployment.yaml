@@ -49,6 +49,23 @@ spec:
                   key: database_url
             - name: AUTH_SERVICE_URL
               value: "http://auth-service:8001"
+          # OpenTelemetry (Fase 4): telemetria vai para o OTel Collector gateway
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-gateway.observability.svc:4318"
+            - name: OTEL_EXPORTER_OTLP_PROTOCOL
+              value: "http/protobuf"
+            - name: OTEL_SERVICE_NAME
+              value: "flag-service"
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: "service.namespace=togglemaster,deployment.environment=dev"
+            - name: OTEL_METRICS_EXPORTER
+              value: "none"
+            - name: OTEL_LOGS_EXPORTER
+              value: "none"
+            - name: OTEL_PYTHON_LOG_CORRELATION
+              value: "true"
+            - name: OTEL_PYTHON_FLASK_EXCLUDED_URLS
+              value: "health"
           resources:
             requests:
               memory: "128Mi"
