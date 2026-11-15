@@ -35,7 +35,7 @@ spec:
       containers:
         - name: flag-service
           # >>> ESTA LINHA E REESCRITA PELO CI <<<
-          image: 604218333422.dkr.ecr.us-east-1.amazonaws.com/toggle-master/flag-service:20260915-5e44a10
+          image: 604218333422.dkr.ecr.us-east-1.amazonaws.com/toggle-master/flag-service:20261115-c643410
           imagePullPolicy: Always
           ports:
             - name: http
