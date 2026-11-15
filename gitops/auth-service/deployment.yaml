@@ -35,7 +35,7 @@ spec:
       containers:
         - name: auth-service
           # >>> ESTA LINHA E REESCRITA PELO CI <<<
-          image: 604218333422.dkr.ecr.us-east-1.amazonaws.com/toggle-master/auth-service:20260915-0275f92
+          image: 604218333422.dkr.ecr.us-east-1.amazonaws.com/toggle-master/auth-service:20261115-9cc22e1
           imagePullPolicy: Always
           ports:
             - name: http
