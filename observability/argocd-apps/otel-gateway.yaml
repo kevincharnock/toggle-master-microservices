@@ -1,0 +1,137 @@
+# ============================================================================
+# OTel Collector GATEWAY (Deployment) - a peca central da telemetria.
+#
+# Os 5 microsservicos exportam OTLP para http://otel-gateway.observability.svc:4318
+# e o DaemonSet otel-logs encaminha para ca os logs dos conteineres.
+#
+# Roteamento:
+#   traces  --> New Relic (APM)                + connector spanmetrics
+#   spanmetrics (traces viram metricas) --> Prometheus (remote write)
+#   metrics (OTLP dos servicos)          --> Prometheus (remote write)
+#   logs    --> Loki (OTLP nativo)
+#
+# A chave do New Relic vem do Secret newrelic-secret (criado a mao, fora do git).
+# ============================================================================
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: otel-gateway
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://open-telemetry.github.io/opentelemetry-helm-charts
+    chart: opentelemetry-collector
+    targetRevision: 0.178.3
+    helm:
+      releaseName: otel-gateway
+      valuesObject:
+        mode: deployment
+        fullnameOverride: otel-gateway
+        image:
+          repository: otel/opentelemetry-collector-contrib
+        replicaCount: 1
+
+        presets:
+          # Enriquece com k8s.pod.name, k8s.deployment.name etc. (cria o RBAC necessario)
+          kubernetesAttributes:
+            enabled: true
+
+        extraEnvs:
+          - name: NEW_RELIC_LICENSE_KEY
+            valueFrom:
+              secretKeyRef:
+                name: newrelic-secret
+                key: license-key
+                optional: true
+
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            memory: 512Mi
+
+        # So OTLP: desliga as portas de jaeger/zipkin do chart
+        ports:
+          jaeger-compact:
+            enabled: false
+          jaeger-thrift:
+            enabled: false
+          jaeger-grpc:
+            enabled: false
+          zipkin:
+            enabled: false
+
+        config:
+          receivers:
+            jaeger: null
+            zipkin: null
+            prometheus: null
+            otlp:
+              protocols:
+                grpc:
+                  endpoint: ${env:MY_POD_IP}:4317
+                http:
+                  endpoint: ${env:MY_POD_IP}:4318
+
+          processors:
+            batch: {}
+            memory_limiter:
+              check_interval: 5s
+              limit_percentage: 80
+              spike_limit_percentage: 25
+
+          connectors:
+            # Gera traces_span_metrics_calls_total e traces_span_metrics_duration_*
+            # por servico/rota/status. Daqui saem "taxa de requisicoes" e "taxa de erro".
+            spanmetrics:
+              namespace: traces.span.metrics
+              histogram:
+                explicit:
+                  buckets: [5ms, 10ms, 25ms, 50ms, 100ms, 250ms, 500ms, 1s, 2s, 5s]
+              dimensions:
+                - name: http.request.method
+                - name: http.response.status_code
+                - name: http.method
+                - name: http.status_code
+              metrics_flush_interval: 15s
+
+          exporters:
+            otlp/newrelic:
+              endpoint: otlp.nr-data.net:4317
+              headers:
+                api-key: ${env:NEW_RELIC_LICENSE_KEY}
+              compression: gzip
+            prometheusremotewrite:
+              endpoint: http://kps-kube-prometheus-stack-prometheus.observability.svc:9090/api/v1/write
+              resource_to_telemetry_conversion:
+                enabled: true
+            otlphttp/loki:
+              endpoint: http://loki.observability.svc:3100/otlp
+            debug:
+              verbosity: basic
+
+          service:
+            pipelines:
+              traces:
+                receivers: [otlp]
+                processors: [memory_limiter, k8sattributes, batch]
+                exporters: [otlp/newrelic, spanmetrics]
+              metrics:
+                receivers: [otlp, spanmetrics]
+                processors: [memory_limiter, k8sattributes, batch]
+                exporters: [prometheusremotewrite]
+              logs:
+                receivers: [otlp]
+                processors: [memory_limiter, k8sattributes, batch]
+                exporters: [otlphttp/loki]
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: observability
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

@@ -1,0 +1,117 @@
+# ============================================================================
+# Dashboard customizado "ToggleMaster - Visao Geral"
+#
+# Reune em uma tela so (requisito da Fase 4):
+#   1. uso de recursos do cluster (CPU, memoria, pods, restarts) - Prometheus
+#   2. taxa de requisicoes, taxa de erro e latencia dos 5 microsservicos -
+#      metricas spanmetrics geradas pelo OTel Collector a partir dos traces
+#   3. logs em tempo real dos conteineres - Loki
+#
+# O sidecar do Grafana carrega este ConfigMap pela label grafana_dashboard: "1".
+# ============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: togglemaster-dashboard
+  labels:
+    grafana_dashboard: "1"
+data:
+  togglemaster.json: |
+    {
+      "uid": "togglemaster-overview",
+      "title": "ToggleMaster - Visao Geral",
+      "tags": ["togglemaster", "fase4"],
+      "timezone": "browser",
+      "refresh": "10s",
+      "time": { "from": "now-30m", "to": "now" },
+      "schemaVersion": 39,
+      "templating": {
+        "list": [
+          {
+            "name": "servico",
+            "label": "Servico",
+            "type": "custom",
+            "query": "auth-service,flag-service,targeting-service,evaluation-service,analytics-service",
+            "multi": true,
+            "includeAll": true,
+            "allValue": ".*",
+            "current": { "text": "All", "value": "$__all" }
+          }
+        ]
+      },
+      "panels": [
+        { "type": "row", "title": "Recursos do cluster", "gridPos": { "x": 0, "y": 0, "w": 24, "h": 1 } },
+        {
+          "type": "stat", "title": "CPU dos nos (%)",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "gridPos": { "x": 0, "y": 1, "w": 6, "h": 5 },
+          "fieldConfig": { "defaults": { "unit": "percent", "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "orange", "value": 70 }, { "color": "red", "value": 85 } ] } } },
+          "targets": [ { "refId": "A", "expr": "100 * (1 - avg(rate(node_cpu_seconds_total{mode=\"idle\"}[5m])))" } ]
+        },
+        {
+          "type": "stat", "title": "Memoria dos nos (%)",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "gridPos": { "x": 6, "y": 1, "w": 6, "h": 5 },
+          "fieldConfig": { "defaults": { "unit": "percent", "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "orange", "value": 75 }, { "color": "red", "value": 90 } ] } } },
+          "targets": [ { "refId": "A", "expr": "100 * (1 - sum(node_memory_MemAvailable_bytes) / sum(node_memory_MemTotal_bytes))" } ]
+        },
+        {
+          "type": "stat", "title": "Pods Running por namespace",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "gridPos": { "x": 12, "y": 1, "w": 6, "h": 5 },
+          "targets": [ { "refId": "A", "expr": "sum by (namespace) (kube_pod_status_phase{phase=\"Running\", namespace=~\"default|observability|argocd\"})", "legendFormat": "{{namespace}}" } ]
+        },
+        {
+          "type": "stat", "title": "Restarts dos microsservicos (1h)",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "gridPos": { "x": 18, "y": 1, "w": 6, "h": 5 },
+          "targets": [ { "refId": "A", "expr": "sum(increase(kube_pod_container_status_restarts_total{namespace=\"default\"}[1h]))" } ]
+        },
+        {
+          "type": "timeseries", "title": "CPU por microsservico (cores)",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "gridPos": { "x": 0, "y": 6, "w": 12, "h": 8 },
+          "fieldConfig": { "defaults": { "unit": "short" } },
+          "targets": [ { "refId": "A", "expr": "sum by (container) (rate(container_cpu_usage_seconds_total{namespace=\"default\", container=~\"$servico\", container!=\"\"}[2m]))", "legendFormat": "{{container}}" } ]
+        },
+        {
+          "type": "timeseries", "title": "Memoria por microsservico",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "gridPos": { "x": 12, "y": 6, "w": 12, "h": 8 },
+          "fieldConfig": { "defaults": { "unit": "bytes" } },
+          "targets": [ { "refId": "A", "expr": "sum by (container) (container_memory_working_set_bytes{namespace=\"default\", container=~\"$servico\", container!=\"\"})", "legendFormat": "{{container}}" } ]
+        },
+
+        { "type": "row", "title": "Microsservicos (OTel spanmetrics)", "gridPos": { "x": 0, "y": 14, "w": 24, "h": 1 } },
+        {
+          "type": "timeseries", "title": "Taxa de requisicoes (req/s)",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "gridPos": { "x": 0, "y": 15, "w": 8, "h": 8 },
+          "fieldConfig": { "defaults": { "unit": "reqps" } },
+          "targets": [ { "refId": "A", "expr": "sum by (service_name) (rate(traces_span_metrics_calls_total{span_kind=\"SPAN_KIND_SERVER\", service_name=~\"$servico\"}[1m]))", "legendFormat": "{{service_name}}" } ]
+        },
+        {
+          "type": "timeseries", "title": "Taxa de erro (%)",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "gridPos": { "x": 8, "y": 15, "w": 8, "h": 8 },
+          "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "custom": { "thresholdsStyle": { "mode": "line" } }, "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 5 } ] } } },
+          "targets": [ { "refId": "A", "expr": "100 * sum by (service_name) (rate(traces_span_metrics_calls_total{span_kind=\"SPAN_KIND_SERVER\", status_code=\"STATUS_CODE_ERROR\", service_name=~\"$servico\"}[1m])) / sum by (service_name) (rate(traces_span_metrics_calls_total{span_kind=\"SPAN_KIND_SERVER\", service_name=~\"$servico\"}[1m]))", "legendFormat": "{{service_name}}" } ]
+        },
+        {
+          "type": "timeseries", "title": "Latencia p95",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "gridPos": { "x": 16, "y": 15, "w": 8, "h": 8 },
+          "fieldConfig": { "defaults": { "unit": "ms" } },
+          "targets": [ { "refId": "A", "expr": "histogram_quantile(0.95, sum by (service_name, le) (rate(traces_span_metrics_duration_milliseconds_bucket{span_kind=\"SPAN_KIND_SERVER\", service_name=~\"$servico\"}[2m])))", "legendFormat": "{{service_name}}" } ]
+        },
+
+        { "type": "row", "title": "Logs em tempo real (Loki)", "gridPos": { "x": 0, "y": 23, "w": 24, "h": 1 } },
+        {
+          "type": "logs", "title": "Logs dos microsservicos",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "gridPos": { "x": 0, "y": 24, "w": 24, "h": 12 },
+          "options": { "showTime": true, "wrapLogMessage": true, "sortOrder": "Descending", "enableLogDetails": true },
+          "targets": [ { "refId": "A", "expr": "{k8s_namespace_name=\"default\", k8s_container_name=~\"$servico\"}" } ]
+        }
+      ]
+    }

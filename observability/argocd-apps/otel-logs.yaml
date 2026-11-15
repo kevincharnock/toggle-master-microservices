@@ -1,0 +1,81 @@
+# ============================================================================
+# OTel Collector AGENTE (DaemonSet) - um pod por no.
+#
+# Le os arquivos de log de TODOS os conteineres do no (/var/log/pods) com o
+# receiver filelog, extrai namespace/pod/conteiner do caminho do arquivo e
+# encaminha em OTLP para o gateway, que entrega no Loki.
+# Assim todo log do cluster passa pelo OTel Collector antes de chegar ao Loki.
+# ============================================================================
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: otel-logs
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://open-telemetry.github.io/opentelemetry-helm-charts
+    chart: opentelemetry-collector
+    targetRevision: 0.178.3
+    helm:
+      releaseName: otel-logs
+      valuesObject:
+        mode: daemonset
+        fullnameOverride: otel-logs
+        image:
+          repository: otel/opentelemetry-collector-contrib
+
+        presets:
+          # filelog em /var/log/pods com parser de conteiner (monta hostPath)
+          logsCollection:
+            enabled: true
+            includeCollectorLogs: false
+          kubernetesAttributes:
+            enabled: true
+
+        resources:
+          requests:
+            cpu: 50m
+            memory: 128Mi
+          limits:
+            memory: 256Mi
+
+        ports:
+          jaeger-compact:
+            enabled: false
+          jaeger-thrift:
+            enabled: false
+          jaeger-grpc:
+            enabled: false
+          zipkin:
+            enabled: false
+
+        config:
+          receivers:
+            jaeger: null
+            zipkin: null
+            prometheus: null
+          processors:
+            batch: {}
+          exporters:
+            otlp/gateway:
+              endpoint: otel-gateway.observability.svc:4317
+              tls:
+                insecure: true
+          service:
+            pipelines:
+              traces: null
+              metrics: null
+              logs:
+                receivers: [filelog]
+                processors: [memory_limiter, k8sattributes, batch]
+                exporters: [otlp/gateway]
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: observability
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

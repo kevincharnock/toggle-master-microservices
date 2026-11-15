@@ -1,0 +1,80 @@
+# ============================================================================
+# kube-prometheus-stack: Prometheus + Grafana + node-exporter + kube-state-metrics
+#
+# Instalado pelo ArgoCD direto do repositorio Helm oficial (GitOps).
+# - Prometheus aceita remote write: e por ai que o OTel Collector (gateway)
+#   entrega as metricas geradas a partir dos traces (spanmetrics).
+# - Grafana ja nasce com o datasource do Loki e com o sidecar que carrega
+#   dashboards de ConfigMaps com a label grafana_dashboard: "1".
+# - Sem EBS CSI no cluster: tudo em emptyDir (suficiente para a demo).
+# ============================================================================
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kps
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://prometheus-community.github.io/helm-charts
+    chart: kube-prometheus-stack
+    targetRevision: 93.3.0
+    helm:
+      releaseName: kps
+      valuesObject:
+        # Componentes do control plane nao sao acessiveis no EKS
+        kubeEtcd:
+          enabled: false
+        kubeControllerManager:
+          enabled: false
+        kubeScheduler:
+          enabled: false
+        kubeProxy:
+          enabled: false
+
+        # Alertas ficam no Grafana Alerting (bloco D), nao no Alertmanager
+        alertmanager:
+          enabled: false
+
+        prometheus:
+          prometheusSpec:
+            retention: 2d
+            # Recebe as metricas do OTel Collector (exporter prometheusremotewrite)
+            enableRemoteWriteReceiver: true
+            # Le ServiceMonitors/PodMonitors de qualquer release, nao so do kps
+            serviceMonitorSelectorNilUsesHelmValues: false
+            podMonitorSelectorNilUsesHelmValues: false
+            resources:
+              requests:
+                cpu: 200m
+                memory: 512Mi
+              limits:
+                memory: 1536Mi
+
+        grafana:
+          adminPassword: toggle-admin
+          sidecar:
+            dashboards:
+              enabled: true
+              label: grafana_dashboard
+              labelValue: "1"
+              searchNamespace: ALL
+          additionalDataSources:
+            - name: Loki
+              uid: loki
+              type: loki
+              access: proxy
+              url: http://loki.observability.svc:3100
+              jsonData:
+                maxLines: 1000
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: observability
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      # Os CRDs do prometheus-operator excedem o limite de annotation do apply comum
+      - ServerSideApply=true

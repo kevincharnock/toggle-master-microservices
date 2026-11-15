@@ -105,9 +105,14 @@ O patch de observabilidade cria `observability/argocd-apps/` com 5 Applications
 em `observability/dashboards/togglemaster-dashboard.yaml` (ConfigMap com label
 `grafana_dashboard: "1"`, lido pelo sidecar do Grafana).
 
-As versoes dos charts estao como `PIN_KPS`/`PIN_LOKI`/`PIN_OTEL`. Rode
-`./scripts/pin-chart-versions.sh` (ele faz `helm search repo` e fixa a versao mais
-recente de cada chart), confira o diff, commit + push.
+Os arquivos foram escritos do zero (o patch original nao existia) e as versoes dos
+charts ja estao fixadas: kube-prometheus-stack 93.3.0, loki 7.6.0,
+opentelemetry-collector 0.178.3 (collector 0.163.2). Todos validados com
+`helm template`. Os values ficam inline (`helm.valuesObject`) em cada Application.
+Atencao: a partir desse chart do collector os componentes sao renomeados
+(`otlphttp` -> `otlp_http`, `k8sattributes` -> `k8s_attributes`, `filelog` -> `file_log`).
+Confirmar no Prometheus o nome real das metricas do spanmetrics
+(`traces_span_metrics_calls_total`) antes de montar o alerta do bloco D.
 
 Passos:
 1. `kubectl create ns observability`
